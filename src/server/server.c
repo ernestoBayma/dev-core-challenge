@@ -11,6 +11,8 @@ static struct user users[MAX_USERS];
 // se não achar retorna -1
 int find_user(char* username);
 void make_users_dirs();
+void handle_client(int fd, char* buffer);
+
 
 
 int main()
@@ -59,7 +61,8 @@ int main()
                 // process
                 printf("sending hello back\n");
                 write(new_conection, HANDSHAKE, MAX_HANDSHAKE_SIZE);
-
+                
+                handle_client(new_conection, buffer);
             }
             else 
             {
@@ -67,15 +70,10 @@ int main()
                 close(new_conection);
             }
         }
-
-        
-        
     }
 
 
     close(listener);
-    
-
     return 0;
 }
 
@@ -94,6 +92,45 @@ int find_user(char* username)
     }
 
     return result;
+}
+
+void handle_client(int fd, char* buffer)
+{
+    bzero(buffer, sizeof buffer);
+    int nbytes;
+    // vê se tem algum user com esse user id
+    nbytes = recv(fd, buffer, sizeof buffer, 0);
+    log_if_err_and_exit(nbytes, "recv");
+    if(nbytes == 0)
+    {
+        printf("connection closed\n");
+        close(fd);
+    }
+    else
+    {
+        // TODO(ernesto): validar no server também
+        if(find_user(buffer) >= 0)
+        {
+            printf("found user\n");
+            nbytes = write(fd, STATUS_SUCCESS, SIZE_STATUS);
+            log_if_err_and_exit(nbytes, "write");
+        }
+        else 
+        {
+            printf("did not find user\n");
+            nbytes = write(fd, STATUS_DENIED, SIZE_STATUS);
+            log_if_err_and_exit(nbytes, "write");
+        }
+    }
+}
+
+void send_status_denied(int fd, char* message)
+{
+    int len = strlen(message);
+    char buffer[MAX_BUFFER_SIZE];
+    int written = snprintf(buffer, sizeof buffer, "%d", len);
+    log_if_err_and_exit(write(fd, buffer, written), "write sending len on send_status_denied");
+    log_if_err_and_exit(write(fd, message, len), "write sending the message on send_status_denied");
 }
 
 void make_users_dirs()

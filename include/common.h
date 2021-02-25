@@ -17,11 +17,12 @@
 #include <signal.h>
 
 #define PORT "50080"
-#define MAX_BUFFER_SIZE 1024
+#define MAX_BUFFER_SIZE 8192
 #define MAX_HANDSHAKE_SIZE 6
 #define HANDSHAKE "hello"
+#define SIZE_STATUS 4
 #define STATUS_SUCCESS "OOK"
-#define STATUS_ERROR "NOK"
+#define STATUS_DENIED "NOK"
 #define MAX_USERNAME_LEN 256
 #define MAX_DIR_LEN PATH_MAX
 #define MAX_USERS 2
