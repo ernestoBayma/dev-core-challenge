@@ -1,8 +1,8 @@
 #include <common.h>
-#include <util.h>
 
 // remover quando virar daemon
 #include <stdio.h>
+#include <stdarg.h>
 
 
 void log_if_err_and_exit(int value, char* message)
@@ -15,18 +15,49 @@ void log_if_err_and_exit(int value, char* message)
     } 
 }
 
-int write_to_socket(int socket_fd, void* buffer, size_t buffer_len)
+int recv_and_fill_buffer(int fd, char *buffer, size_t buffer_size)
+{
+    size_t cursor = 0;
+    int nbytes;
+    int left = buffer_size;
+    while(left > 0)
+    {
+        nbytes = recv(fd, buffer + cursor, left, 0);
+        if(nbytes == -1) 
+        {
+            if(errno == EINTR) continue;
+            return -1;
+        }
+        if(nbytes == 0)
+        {
+            break;
+        }
+
+        cursor += nbytes;
+        left -= nbytes;
+    }
+
+    return cursor;
+}
+
+int write_all(int fd, char *buffer, size_t buffer_len)
 {
     int cursor = 0;
     int bytes_sent;
     while(cursor < buffer_len)
     {
-        bytes_sent = write(socket_fd, buffer + cursor, buffer_len - cursor);
+        bytes_sent = write(fd, buffer + cursor, buffer_len - cursor);
 
-        if(bytes_sent < 0)
+        if(bytes_sent == -1)
         {
-            if(errno == EAGAIN) return -1;
+            if(errno == EINTR) continue;
+
+            return -1;
         } 
+        if(bytes_sent == 0)
+        {
+            break;
+        }
 
         cursor += bytes_sent;
     }
@@ -53,40 +84,33 @@ int send_all(int socket_fd, char *buffer, int *buffer_len)
     return n == -1 ? -1 : 0;
 }
 
-void add_user(struct user *p_user, char* username)
+void indicate_error(struct status *s, char *message)
 {
-    char *path = malloc(sizeof(char) * MAX_DIR_LEN);
-    char cwd[MAX_DIR_LEN];
-    if(path != NULL)
-    {
-        getcwd(cwd, MAX_DIR_LEN);
-        strncat(path, cwd, MAX_DIR_LEN);
-        size_t len = strlen(path);
+    bzero(s->message_error, MESSAGE_ERROR_BUFFER_SIZE);
+    strncpy(s->message_error, message, MESSAGE_ERROR_BUFFER_SIZE);
+    s->error = true;
+}
 
-        strncpy(p_user->username, username, MAX_USERNAME_LEN - 1);
-        p_user->username[MAX_USERNAME_LEN] = '\0';
+int serialize_and_send(int fd, char *buffer, char *fmt, ...)
+{
+    int nbytes;
+    va_list va;
+    va_start(va, fmt);
 
-        if(len >= MAX_DIR_LEN)
-        {
-            path[len - 1] = '\0';
-            p_user->directory = path;
-            return;
-        }
+    vsnprintf(buffer, MAX_BUFFER_SIZE, fmt, va);
+    int len = strlen(buffer);
+    int converted = htonl(len);
 
-        
-        path[len] = '/';
-        strncat(path, p_user->username, MAX_DIR_LEN - 1);
-        path[MAX_DIR_LEN] = '\0';
+    // mandamos o tamanho do comando primeiro
+    nbytes = write(fd, &converted, sizeof converted);
+    log_if_err_and_exit(nbytes, "write in send_command:get: size");
 
-        p_user->directory = path;
-       
-    }
-    else
-    {
-        printf("out of memory\n");
-        exit(1);
-    }
-    
+    // mandmos o comando
+    nbytes = write_all(fd, buffer, len);
+    log_if_err_and_exit(nbytes, "write in send_command:get: command");
+
+    va_end(va);
+    return nbytes;
 }
 
 int check_hello(char* buffer)
