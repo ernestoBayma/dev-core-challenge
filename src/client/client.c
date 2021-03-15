@@ -43,21 +43,27 @@ void client_loop(int fd, char* const buffer)
                     print_status_denied(fd);
                     break;
                 }
+                
                 while(running)
                 {
                     bzero(buffer, sizeof buffer);
+                    struct status s = {0};
 
                     printf(">");
                     fgets(buffer, MAX_BUFFER_SIZE - 1, stdin);
                     
-                    if(parse_commands_from_user(buffer, &options))
+                    if(parse_commands_from_user(buffer, &options, &s))
                     {
                         // comandos tem que ser enviados para o servidor
                         // menos help
                         // e o servidor manda o OOK se for válido ou
                         // NOK se for inválido seguido por o tamanho em bytes
                         // da resposta e o conteúdo da resposta para ser impresso na tela
-                        
+                        if(s.error)
+                        {
+                            printf("%s", s.message_error);
+                            continue;
+                        }
                 
                         if(options.bitfield & Help_C)
                         {
@@ -65,7 +71,7 @@ void client_loop(int fd, char* const buffer)
                         }
                         else
                         {
-                            if(send_command(fd, &options) != -1)
+                            if(send_command_to_server(fd, &options) != -1)
                             {
                                 int status_result = reading_status(fd);
                                 if( status_result > 0)
@@ -77,6 +83,10 @@ void client_loop(int fd, char* const buffer)
                                     else if(options.bitfield & Get_C)
                                     {
                                         reading_get_return(fd, &options);
+                                    }
+                                    else if(options.bitfield & Send_C)
+                                    {
+                                        send_file_to_server(fd, &options);
                                     }
                                     else if(options.bitfield & Exit_C)
                                     {
@@ -144,7 +154,7 @@ void help()
 }
 
 
-int send_command(int fd, struct command_options *options)
+int send_command_to_server(int fd, struct command_options *options)
 {
     if(options == NULL)
     {
@@ -174,6 +184,50 @@ int send_command(int fd, struct command_options *options)
     }
 }
 
+void send_file_to_server(int fd, struct command_options *options)
+{
+    if(options->path)
+    {
+        // TODO(ern): Achar uma forma melhor de lidar com esse erro.
+        int file_fd = open(options->path, O_RDONLY);
+        if(file_fd < 0)
+        {
+            if(errno == ENOENT)
+            {
+                printf("arquivo não existe.\n");
+                
+            }
+            else
+            {
+                printf("erro abrindo o arquivo.\n");
+            }
+            return;
+        }
+
+        off_t offset;
+        int sbytes, t_sbytes;
+        int file_size = options->file_size;
+        int converted = htonl(file_size);
+        int nbytes = write_all(fd, (char*)&converted, sizeof converted);
+        log_if_err_and_exit(nbytes, "erro mandando o tamanho do arquivo.");
+
+        do
+        {
+            sbytes = sendfile(fd, file_fd, &offset, MAX_BUFFER_SIZE);
+            if (sbytes == -1)
+            {
+                printf("erro mandando o arquivo.");
+                break;
+            }
+            printf("enviamos %d bytes\n", sbytes);
+            t_sbytes += sbytes;
+        } while (t_sbytes < file_size);
+    
+    
+        
+    }
+}
+
 void reading_get_return(int fd, struct command_options *options)
 {
     
@@ -187,7 +241,7 @@ void reading_get_return(int fd, struct command_options *options)
     char buffer[MAX_BUFFER_SIZE];
     bzero(buffer, sizeof buffer);
 
-    int file_fd = open(options->filename, O_WRONLY | O_APPEND | O_CREAT, 0766);
+    int file_fd = open(options->filename, O_WRONLY | O_CREAT, 0766);
     if(file_fd == -1)
     {
         perror("erro abrindo o arquivo.");
@@ -270,7 +324,7 @@ int reading_status(int fd)
 
 void print_status_denied(int fd)
 {
-    char buffer[MAX_BUFFER_SIZE] = {0};
+    char buffer[MAX_BUFFER_SIZE];
     int nbytes;
 
     int32_t size_of_response;

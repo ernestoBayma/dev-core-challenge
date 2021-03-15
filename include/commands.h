@@ -28,11 +28,13 @@ struct command_options
     int bitfield;
     bool asc; // se asc for falso então desc é verdade
     bool name; // se name for false então size é verdade
+    size_t file_size; // só é usado no comando send
 };
+struct status;
 
 void help();
 bool parse_command_from_client(char *command, struct command_options *options);
-bool parse_commands_from_user(char *buffer, struct command_options *options);
+bool parse_commands_from_user(char *buffer, struct command_options *options, struct status *s);
 int read_command(int fd, char *buffer);
 void handle_list_command(int fd, int user_index, struct command_options *options);
 

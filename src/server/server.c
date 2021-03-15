@@ -127,8 +127,7 @@ void handle_client(int fd, char *buffer)
 
                         else if (options.bitfield & Send_C)
                         {
-                            send_status_success(fd);
-                            printf("recebemos %s\n", buffer);
+                            handle_send_command(fd,user_index, &options);
                         }
 
                         else if (options.bitfield & Exit_C)
@@ -170,6 +169,69 @@ void handle_client(int fd, char *buffer)
         }
     }
 }
+
+void handle_send_command(int fd, int user_index, struct command_options *options)
+{
+    if(options->path != NULL)
+    {
+        int32_t size_of_file;
+        char buffer[MAX_BUFFER_SIZE] = {0};
+        int nbytes, wbytes, to_read;
+
+        send_status_success(fd);
+        nbytes = read(fd, &size_of_file ,sizeof(size_of_file));
+
+        if(nbytes <= 0)
+        {
+            // TODO(ern): mudar para algum tipo de log.
+            printf("erro lendo file_size\n");
+            return;
+        }
+
+        size_of_file = ntohl(size_of_file);
+
+        char *user_dir = users[user_index].directory;
+        char *filename_from_path = basename(options->path);
+
+        // NOTE(ern): Usando buffer de forma temporária 
+        // para ter o path aonde o arquivo vindo
+        // do cliente vai ser salvo 
+        snprintf(buffer, PATH_MAX - 1, "%s/%s", user_dir, filename_from_path);
+
+        int file_fd = open(buffer, O_WRONLY | O_CREAT, 0766);
+        if(file_fd == -1)
+        {
+            send_status_denied_and_motive(fd, "erro salvando arquivo na pasta do usuário.");
+            return;
+        }
+
+        while(size_of_file > 0)
+        {
+            to_read = min(MAX_BUFFER_SIZE, size_of_file);
+            nbytes = read(fd, buffer, to_read);
+
+            if(nbytes == -1)
+            {
+                printf("erro lendo a reposta do arquivo.\n");
+                return;
+            }
+            if(nbytes == 0)
+            {
+                break; // final do arquivo
+            }
+
+            wbytes = write(file_fd, buffer, nbytes);
+            if(wbytes == -1)
+            {
+                printf("error escrevendo o arquivo.\n");
+                return;
+            }
+
+            size_of_file -= wbytes;
+        }
+    }
+}
+
 
 void handle_get_command(int fd, int user_index, struct command_options *options)
 {
@@ -262,7 +324,7 @@ void send_file(int fd, int file_fd, size_t file_size)
         }
         printf("enviamos %d bytes\n", sbytes);
         t_sbytes += sbytes;
-    } while (sbytes < file_size);
+    } while (t_sbytes < file_size);
 }
 
 void handle_list_command(int fd, int user_index, struct command_options *options)

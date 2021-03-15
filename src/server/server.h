@@ -45,7 +45,8 @@ void send_status_denied(int fd);
 void send_status_success(int fd);
 int read_command(int fd, char *buffer);
 void send_formated_list_command(int fd, char *buffer, struct directory_files *dir_files);
-void handle_get_command(int fd, int user_idex, struct command_options *options);
+void handle_get_command(int fd, int user_index, struct command_options *options);
+void handle_send_command(int fd, int user_index, struct command_options *options);
 void send_file(int fd, int file_fd, size_t file_size);
 size_t check_file(int fd, int user_index, char* buffer, struct command_options *options);
 

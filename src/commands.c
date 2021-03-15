@@ -6,7 +6,7 @@
 // retorna true se for um comando válido e preenche options
 // com as opções do usuário
 // retorna falso se não for um comando reconhecido 
-bool parse_commands_from_user(char *buffer, struct command_options *options)
+bool parse_commands_from_user(char *buffer, struct command_options *options, struct status *s)
 {
     // assume que buffer é termina com null
     char *temp = buffer;
@@ -22,6 +22,7 @@ bool parse_commands_from_user(char *buffer, struct command_options *options)
     options->name = NULL;
     options->name = false;
     options->asc = false;
+    options->file_size = 0;
 
     if(strncmp(temp, "list", 4) == 0 || strncmp(temp, "LIST", 4) == 0)
     {
@@ -62,6 +63,10 @@ bool parse_commands_from_user(char *buffer, struct command_options *options)
                 {
                     options->asc = false;
                     return true;
+                }
+                else
+                {
+                    return false;
                 }
             } 
         }
@@ -106,6 +111,23 @@ bool parse_commands_from_user(char *buffer, struct command_options *options)
             if((resolved = realpath(temp, NULL)) != NULL)
             {
                 options->path = resolved;
+            }
+            else
+            {
+                indicate_error(s, "path inválido.\n");
+                return true;
+            }
+
+            struct stat st;
+            if(stat(options->path, &st) == 0)
+            {
+                if(!S_ISREG(st.st_mode))
+                {
+                    indicate_error(s, "path não tem um arquivo\n");
+                    return true;
+                }
+                options->file_size = st.st_size;
+
             }
             return true;
         }
