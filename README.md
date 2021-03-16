@@ -18,3 +18,8 @@ para que as pastas dos clientes sejam criadas corretamente e que não tenha prob
 > ./build/dev-core-server
 * Client
 > ./build/dev-core-client
+
+### Id cadastradas
+No projeto existem apenas duas id válidas, 'bob' que já possui uma pasta com arquivos 
+e 'test' que tem a sua pasta criada se ela já não existir. 
+Qualquer outra id o programa fecha sem dar continuidade.
