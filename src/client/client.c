@@ -189,7 +189,7 @@ void send_file_to_server(int fd, struct command_options *options)
     if(options->path)
     {
         // TODO(ern): Achar uma forma melhor de lidar com esse erro.
-        int file_fd = open(options->path, O_RDONLY);
+        int file_fd = open(options->path, O_CLOEXEC | O_RDONLY, 0766);
         if(file_fd < 0)
         {
             if(errno == ENOENT)
@@ -204,7 +204,7 @@ void send_file_to_server(int fd, struct command_options *options)
             return;
         }
 
-        off_t offset;
+        off_t offset = 0;
         int sbytes, t_sbytes;
         int file_size = options->file_size;
         int converted = htonl(file_size);
@@ -213,17 +213,18 @@ void send_file_to_server(int fd, struct command_options *options)
 
         do
         {
-            sbytes = sendfile(fd, file_fd, &offset, MAX_BUFFER_SIZE);
+            sbytes = sendfile(fd, file_fd, &offset, file_size);
             if (sbytes == -1)
             {
-                printf("erro mandando o arquivo.");
-                break;
+                close(file_fd);
+                log_if_err_and_exit(nbytes, "erro mandando o arquivo.");
+                return;
             }
             printf("enviamos %d bytes\n", sbytes);
             t_sbytes += sbytes;
         } while (t_sbytes < file_size);
     
-    
+        close(file_fd);
         
     }
 }

@@ -1,12 +1,37 @@
 #include "server.h"
+#include <syslog.h>
 #include <stdio.h>
 
 static struct user users[MAX_USERS];
+
+static void handle_sigchld(int sig)
+{
+    int savederrno;
+    savederrno = errno;
+    while(waitpid(-1, NULL, WNOHANG) > 0) continue;
+    errno = savederrno;
+}
+
+int became_daemon()
+{
+    
+}
+
 
 int main()
 {
     int listener, new_conection, nbytes;
     char buffer[MAX_BUFFER_SIZE] = {0};
+    struct sigaction sa;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sa.sa_handler = handle_sigchld;
+
+    if(sigaction(SIGCHLD, &sa, NULL) == -1)
+    {
+        syslog(LOG_ERR, "Error from sigaction %s", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
     struct sockaddr_in sock_addr;
     socklen_t sock_addr_len;
@@ -16,27 +41,27 @@ int main()
     make_users_dirs();
 
     listener = setup_server();
-    log_if_err_and_exit(listener, "server: setup_server");
+    syslog(LOG_ERR, "server: setup_server %s", strerror(errno));
 
     while (1)
     {
         sock_addr_len = sizeof sock_addr;
         if ((new_conection = accept(listener, (struct sockaddr *)&sock_addr, &sock_addr_len)) < 0)
         {
-            perror("accept");
+            syslog(LOG_ERR, "cannot accept %s", strerror(errno));
             exit(1);
         }
 
         bzero(buffer, sizeof buffer);
         if ((nbytes = recv(new_conection, buffer, sizeof buffer, 0)) < 0)
         {
-            perror("recv");
+            syslog(LOG_ERR, "cannot read from new_connection %s", strerror(errno));
             exit(1);
         }
 
         if (nbytes == 0)
         {
-            printf("ending connection\n");
+            syslog(LOG_INFO , "ending connection.");
             close(new_conection);
             continue;
         }
@@ -48,12 +73,26 @@ int main()
                 printf("sending hello back\n");
                 write(new_conection, HANDSHAKE, MAX_HANDSHAKE_SIZE);
 
-                // Precisa lidar com vários clientes ao mesmo tempo.
-                handle_client(new_conection, buffer);
+                // NOTE(ern): Essa é uma forma bem simplistica de lidar com vários 
+                // clientes
+                switch(fork())
+                {
+                    case -1:
+                    syslog(LOG_ERR, "Error creating a child %s", strerror(errno));
+                    close(new_conection);
+                    break;
+                    case 0: // novo processo
+                    close(listener);
+                    handle_client(new_conection, buffer);
+                    _exit(EXIT_SUCCESS);
+                    default:
+                    close(new_conection);
+                    break;
+                }
             }
             else
             {
-                printf("client did not send hello\n");
+                syslog(LOG_ERR, "client did not send hello.");
                 close(new_conection);
             }
         }
@@ -224,11 +263,14 @@ void handle_send_command(int fd, int user_index, struct command_options *options
             if(wbytes == -1)
             {
                 printf("error escrevendo o arquivo.\n");
+                close(file_fd);
                 return;
             }
 
             size_of_file -= wbytes;
         }
+
+        close(file_fd);
     }
 }
 
@@ -309,14 +351,14 @@ void send_file(int fd, int file_fd, size_t file_size)
 
     send_status_success(fd);
     int converted = htonl(file_size);
-    if (write(fd, &converted, sizeof converted) < 0)
+    if (write_all(fd, (char*)&converted, sizeof converted) < 0)
     {
         send_status_denied_and_motive(fd, "erro mandando o tamanho do arquivo.");
         return;
     }
     do
     {
-        sbytes = sendfile(fd, file_fd, &offset, MAX_BUFFER_SIZE);
+        sbytes = sendfile(fd, file_fd, &offset, file_size);
         if (sbytes == -1)
         {
             send_status_denied_and_motive(fd, "erro mandando o arquivo.");
@@ -372,7 +414,7 @@ void send_formated_list_command(int fd, char *buffer, struct directory_files *di
     size_message += 1;
     // manda o tamanho em bytes da lista
     int converted = htonl(size_message);
-    write(fd, &converted, sizeof converted);
+    write_all(fd, (char*)&converted, sizeof converted);
 
     curr = dir_files;
     int bytes_written = 0;

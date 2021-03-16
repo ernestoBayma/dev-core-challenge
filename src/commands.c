@@ -129,6 +129,10 @@ bool parse_commands_from_user(char *buffer, struct command_options *options, str
                 options->file_size = st.st_size;
 
             }
+            else
+            {
+                indicate_error(s, "erro pegando as estatísticas do arquivo\n");
+            }
             return true;
         }
         

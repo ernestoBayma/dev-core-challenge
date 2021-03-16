@@ -28,7 +28,7 @@ struct command_options
     int bitfield;
     bool asc; // se asc for falso então desc é verdade
     bool name; // se name for false então size é verdade
-    size_t file_size; // só é usado no comando send
+    int32_t file_size; // só é usado no comando send
 };
 struct status;
 
