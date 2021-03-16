@@ -220,7 +220,6 @@ void send_file_to_server(int fd, struct command_options *options)
                 log_if_err_and_exit(nbytes, "erro mandando o arquivo.");
                 return;
             }
-            printf("enviamos %d bytes\n", sbytes);
             t_sbytes += sbytes;
         } while (t_sbytes < file_size);
     
@@ -398,7 +397,7 @@ void input_id(char* buffer)
     bool valid_id = true;
     while(true)
     {
-        printf("what is your id: ");
+        printf("Digite o seu id: ");
         if(fgets(buffer, sizeof buffer, stdin) != NULL)
         {
             int new_line = strlen(buffer);

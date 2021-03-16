@@ -12,14 +12,52 @@ static void handle_sigchld(int sig)
     errno = savederrno;
 }
 
-int became_daemon()
+void became_daemon()
 {
+    int fd;
+    switch(fork())
+    {
+        case -1: _exit(EXIT_FAILURE);
+        case 0 : break;
+        default: _exit(EXIT_SUCCESS);
+    }
+
+    if(setsid() == -1) _exit(EXIT_FAILURE);
+    switch(fork())
+    {
+        case -1: _exit(EXIT_FAILURE);
+        case 0 : break;
+        default: _exit(EXIT_SUCCESS);
+    }
+
+    umask(0);
+    int x;
+    for(x = sysconf(_SC_OPEN_MAX); x >= 0; x--)
+    {
+        close(x);
+    }
+
+    close(STDIN_FILENO);
+
+    fd = open("/dev/null", O_RDWR);
+    if(fd != STDIN_FILENO) _exit(EXIT_FAILURE);
+    if(dup2(STDIN_FILENO, STDOUT_FILENO) != STDOUT_FILENO) _exit(EXIT_FAILURE);
+    if(dup2(STDIN_FILENO, STDERR_FILENO) != STDERR_FILENO) _exit(EXIT_FAILURE);
+
     
+    openlog ("dev-core-log", LOG_PID, LOG_DAEMON);
 }
 
 
 int main()
 {
+    became_daemon(); 
+
+
+    add_user(&(users[0]), "bob");
+    add_user(&(users[1]), "test");
+    make_users_dirs();
+
     int listener, new_conection, nbytes;
     char buffer[MAX_BUFFER_SIZE] = {0};
     struct sigaction sa;
@@ -35,10 +73,6 @@ int main()
 
     struct sockaddr_in sock_addr;
     socklen_t sock_addr_len;
-
-    add_user(&(users[0]), "bob");
-    add_user(&(users[1]), "test");
-    make_users_dirs();
 
     listener = setup_server();
     syslog(LOG_ERR, "server: setup_server %s", strerror(errno));
@@ -96,8 +130,9 @@ int main()
                 close(new_conection);
             }
         }
-    }
+    }   
 
+    closelog();
     close(listener);
     return 0;
 }

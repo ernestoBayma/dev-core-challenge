@@ -1,6 +1,5 @@
 #include <common.h>
 
-// remover quando virar daemon
 #include <stdio.h>
 #include <stdarg.h>
 
